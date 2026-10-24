@@ -22,7 +22,15 @@ const { evaluateTriageLevel } = require("./utils/triageValidator");
 const app = express();
 
 app.use(express.json());
-app.use(cors());
+// In backend/server.js
+const cors = require("cors");
+
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://lab-iq-liard.vercel.app/"],
+    credentials: true,
+  }),
+);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
