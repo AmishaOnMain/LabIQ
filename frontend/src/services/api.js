@@ -1,8 +1,12 @@
 import axios from "axios";
 
+import axios from 'axios';
+
 const API = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
 });
+
+// ... rest of your API functions stay the same
 
 export const getLatestReport = (patientId) =>
   API.get(`/reports/latest/${patientId}`);
