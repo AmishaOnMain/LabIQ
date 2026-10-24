@@ -1,13 +1,9 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL:
+    import.meta.env.VITE_API_URL || "https://labiq-backend.onrender.com/api",
 });
-
-// ... rest of your API functions stay the same
-
-export const getLatestReport = (patientId) =>
-  API.get(`/reports/latest/${patientId}`);
 
 export const registerPatient = (patientData) =>
   API.post("/patients", patientData);
@@ -26,3 +22,6 @@ export const getMetricHistory = (patientId, metricName) =>
   API.get(`/reports/history/${patientId}`, {
     params: { metricName },
   });
+
+export const getLatestReport = (patientId) =>
+  API.get(`/reports/latest/${patientId}`);
