@@ -23,7 +23,6 @@ const app = express();
 
 app.use(express.json());
 // In backend/server.js
-const cors = require("cors");
 
 app.use(
   cors({
