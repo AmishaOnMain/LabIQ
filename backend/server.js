@@ -2,37 +2,29 @@ require("dotenv").config();
 
 const express = require("express");
 const connectDB = require("./config/db");
-
 const cors = require("cors");
-
 const mongoose = require("mongoose");
-
 const multer = require("multer");
-
 const { PDFParse } = require("pdf-parse");
-
 const { GoogleGenAI } = require("@google/genai");
 
 const Patient = require("./models/Patient");
-
 const Report = require("./models/Report");
-
 const { evaluateTriageLevel } = require("./utils/triageValidator");
 
 const app = express();
 
 app.use(express.json());
-// In backend/server.js
 
+// CORS configuration (removed trailing slash)
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://lab-iq-liard.vercel.app/"],
+    origin: ["http://localhost:5173", "https://lab-iq-liard.vercel.app"],
     credentials: true,
   }),
 );
 
 const upload = multer({ storage: multer.memoryStorage() });
-
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 mongoose
@@ -48,6 +40,40 @@ app.use((req, res, next) => {
   console.log("Incoming request:", req.method, req.url);
   next();
 });
+
+// Retry helper for 503 high-demand errors
+async function generateContentWithRetry(
+  prompt,
+  config,
+  retries = 3,
+  delay = 2000,
+) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Calling gemini-3.8-flash (Attempt ${i + 1})...`);
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+        config: config,
+      });
+      return response; // Success
+    } catch (error) {
+      const is503 =
+        error.status === 503 ||
+        (error.message && error.message.includes("503"));
+
+      if (is503 && i < retries - 1) {
+        console.warn(
+          `gemini-3.8-flash is experiencing high demand (503). Retrying in ${delay / 1000}s...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 1.5; // Exponential backoff (2s -> 3s -> 4.5s)
+      } else {
+        throw error;
+      }
+    }
+  }
+}
 
 // GET /api/reports/latest/:patientId - Fetch the most recent report for a patient
 app.get("/api/reports/latest/:patientId", async (req, res) => {
@@ -69,9 +95,7 @@ app.get("/api/reports/latest/:patientId", async (req, res) => {
   }
 });
 
-/**
- * 1. POST /api/patients - Register a new patient
- */
+// POST /api/patients - Register a new patient
 app.post("/api/patients", async (req, res) => {
   try {
     const patient = new Patient(req.body);
@@ -82,10 +106,7 @@ app.post("/api/patients", async (req, res) => {
   }
 });
 
-/**
- * 2. POST /api/reports/upload - Process PDF, call LLM, run rules, and save report
- */
-
+// POST /api/reports/upload - Process PDF, call LLM with retry, run rules, and save report
 app.post(
   "/api/reports/upload",
   upload.single("reportPdf"),
@@ -106,7 +127,6 @@ app.post(
       }
 
       const parser = new PDFParse({ data: req.file.buffer });
-
       const pdfData = await parser.getText();
       const extractedText = pdfData.text;
 
@@ -116,8 +136,6 @@ app.post(
           error: "Failed to extract text from PDF file.",
         });
       }
-
-      // In server.js inside app.post('/api/reports/upload', ...)
 
       const prompt = `
   You are an expert clinical lab report data extraction engine.
@@ -130,61 +148,59 @@ app.post(
   "${extractedText}"
 `;
 
-      const aiResponse = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              extractedPatientName: { type: "STRING", nullable: true }, // <--- Added field
-              metrics: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    name: { type: "STRING" },
-                    value: { type: "NUMBER" },
-                    unit: { type: "STRING" },
-                    referenceMin: { type: "NUMBER", nullable: true },
-                    referenceMax: { type: "NUMBER", nullable: true },
-                    status: {
-                      type: "STRING",
-                      enum: [
-                        "NORMAL",
-                        "ELEVATED",
-                        "LOW",
-                        "CRITICAL_HIGH",
-                        "CRITICAL_LOW",
-                      ],
-                    },
-                  },
-                  required: ["name", "value", "unit", "status"],
-                },
-              },
-              summary: {
+      const config = {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            extractedPatientName: { type: "STRING", nullable: true },
+            metrics: {
+              type: "ARRAY",
+              items: {
                 type: "OBJECT",
                 properties: {
-                  plainEnglishOverview: { type: "STRING" },
-                  keyTakeaways: { type: "ARRAY", items: { type: "STRING" } },
-                  recommendedDoctorQuestions: {
-                    type: "ARRAY",
-                    items: { type: "STRING" },
+                  name: { type: "STRING" },
+                  value: { type: "NUMBER" },
+                  unit: { type: "STRING" },
+                  referenceMin: { type: "NUMBER", nullable: true },
+                  referenceMax: { type: "NUMBER", nullable: true },
+                  status: {
+                    type: "STRING",
+                    enum: [
+                      "NORMAL",
+                      "ELEVATED",
+                      "LOW",
+                      "CRITICAL_HIGH",
+                      "CRITICAL_LOW",
+                    ],
                   },
                 },
-                required: [
-                  "plainEnglishOverview",
-                  "keyTakeaways",
-                  "recommendedDoctorQuestions",
-                ],
+                required: ["name", "value", "unit", "status"],
               },
             },
-            required: ["metrics", "summary"],
+            summary: {
+              type: "OBJECT",
+              properties: {
+                plainEnglishOverview: { type: "STRING" },
+                keyTakeaways: { type: "ARRAY", items: { type: "STRING" } },
+                recommendedDoctorQuestions: {
+                  type: "ARRAY",
+                  items: { type: "STRING" },
+                },
+              },
+              required: [
+                "plainEnglishOverview",
+                "keyTakeaways",
+                "recommendedDoctorQuestions",
+              ],
+            },
           },
+          required: ["metrics", "summary"],
         },
-      });
+      };
 
+      // Executing request through retry handler
+      const aiResponse = await generateContentWithRetry(prompt, config);
       const parsedData = JSON.parse(aiResponse.text);
 
       const triageLevel = evaluateTriageLevel(parsedData.metrics);
@@ -214,13 +230,11 @@ app.post(
   },
 );
 
-/**
- * 3. GET /api/reports/history/:patientId - Fetch metric trend history across past reports
- */
+// GET /api/reports/history/:patientId - Fetch metric trend history
 app.get("/api/reports/history/:patientId", async (req, res) => {
   try {
     const { patientId } = req.params;
-    const { metricName } = req.query; // e.g. ?metricName=Glucose
+    const { metricName } = req.query;
 
     const reports = await Report.find({ patientId }).sort({ reportDate: 1 });
 
@@ -228,7 +242,6 @@ app.get("/api/reports/history/:patientId", async (req, res) => {
       return res.json({ reports });
     }
 
-    // Filter historical points for a specific biomarker
     const trendData = reports
       .map((report) => {
         const match = report.metrics.find(
