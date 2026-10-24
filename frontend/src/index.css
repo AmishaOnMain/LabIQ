@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@media print {
+  /* Hide navbar, upload section, and trend charts when printing */
+  header,
+  .print\:hidden,
+  main > div:first-child {
+    display: none !important;
+  }
+
+  /* Expand main content container to full width */
+  main {
+    display: block !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body {
+    background: white !important;
+  }
+}
