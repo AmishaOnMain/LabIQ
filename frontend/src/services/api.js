@@ -1,20 +1,21 @@
-import axios from "axios";
+import axios from 'axios';
+
+// Always default to your live production Render backend
+const PRODUCTION_API_URL = 'https://labiq-backend.onrender.com/api';
 
 const API = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_URL || "https://labiq-backend.onrender.com/api",
+  baseURL: import.meta.env.VITE_API_URL || PRODUCTION_API_URL,
 });
 
-export const registerPatient = (patientData) =>
-  API.post("/patients", patientData);
+export const registerPatient = (patientData) => API.post('/patients', patientData);
 
 export const uploadReport = (patientId, file) => {
   const formData = new FormData();
-  formData.append("patientId", patientId);
-  formData.append("reportPdf", file);
+  formData.append('patientId', patientId);
+  formData.append('reportPdf', file);
 
-  return API.post("/reports/upload", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+  return API.post('/reports/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
 
@@ -23,5 +24,4 @@ export const getMetricHistory = (patientId, metricName) =>
     params: { metricName },
   });
 
-export const getLatestReport = (patientId) =>
-  API.get(`/reports/latest/${patientId}`);
+export const getLatestReport = (patientId) => API.get(`/reports/latest/${patientId}`);

@@ -22,6 +22,14 @@ export default function App() {
     }
   }, []);
 
+  // Inside src/App.jsx
+  useEffect(() => {
+    // Silent ping to wake up free-tier Render container on page load
+    fetch("https://labiq-backend.onrender.com/test")
+      .then(() => console.log("Backend engine online."))
+      .catch((err) => console.warn("Waking up backend service...", err));
+  }, []);
+
   // 2. Handler to set active report and cache it in localStorage
   const handleReportUpload = (report) => {
     setActiveReport(report);
